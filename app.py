@@ -1,6 +1,6 @@
 """
 Customer Churn & Retention Spend Dashboard
-Streamlit Dashboard· SQL cohort analysis
+Simple dark-theme Streamlit UI · SQL cohort analysis
 Made by Sai Preethi
 """
 
@@ -21,43 +21,134 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Simple dark theme only
+# Polished dark theme (still simple)
 # ---------------------------------------------------------------------------
 st.markdown(
     """
 <style>
     .stApp {
-        background-color: #0e1117;
-        color: #fafafa;
+        background:
+            radial-gradient(900px 420px at 0% -10%, rgba(56, 132, 255, 0.16), transparent 55%),
+            radial-gradient(700px 380px at 100% 0%, rgba(168, 85, 247, 0.12), transparent 50%),
+            #0b1220;
+        color: #eaf0ff;
+    }
+    .block-container {
+        padding-top: 1.4rem;
+        padding-bottom: 2rem;
+        max-width: 1200px;
     }
     [data-testid="stSidebar"] {
-        background-color: #161b22;
-        border-right: 1px solid #30363d;
+        background: linear-gradient(180deg, #121a2b 0%, #0d1422 100%);
+        border-right: 1px solid #243047;
     }
     [data-testid="stSidebar"] * {
-        color: #e6edf3;
+        color: #d7e3f4;
     }
     h1, h2, h3, h4 {
-        color: #f0f6fc !important;
+        color: #f4f7ff !important;
+        letter-spacing: -0.02em;
     }
     .stMarkdown, p, label, span {
-        color: #c9d1d9;
+        color: #b7c5d8;
     }
     div[data-testid="stMetricValue"] {
-        color: #f0f6fc !important;
+        color: #f4f7ff !important;
+        font-weight: 700 !important;
     }
     div[data-testid="stMetricLabel"] {
-        color: #8b949e !important;
+        color: #8fa0b8 !important;
+    }
+    div[data-testid="stMetricDelta"] {
+        color: #7dd3fc !important;
+    }
+    /* Metric cards */
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(30, 41, 64, 0.95), rgba(17, 24, 39, 0.92));
+        border: 1px solid #2b3b55;
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+    /* Tabs */
+    button[data-baseweb="tab"] {
+        color: #9db0c9 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: #8ec5ff !important;
+        border-bottom-color: #3b82f6 !important;
+    }
+    /* Inputs / buttons */
+    .stButton > button {
+        background: linear-gradient(180deg, #2563eb, #1d4ed8);
+        color: #fff;
+        border: 1px solid #3b82f6;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(180deg, #3b82f6, #2563eb);
+        border-color: #60a5fa;
     }
     [data-testid="stSidebarCollapsedControl"],
     [data-testid="collapsedControl"] {
         visibility: visible !important;
         display: flex !important;
-        color: #f0f6fc !important;
+        color: #eaf0ff !important;
+        background: #1a2438 !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
     }
-    hr {
-        border-color: #30363d;
+    hr, [data-testid="stDecorator"] {
+        border-color: #2a3a52;
     }
+    /* Soft header strip */
+    .app-header {
+        background: linear-gradient(120deg, rgba(37, 99, 235, 0.18), rgba(147, 51, 234, 0.12));
+        border: 1px solid #2b3b55;
+        border-radius: 16px;
+        padding: 1.1rem 1.25rem 0.95rem 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.22);
+    }
+    .app-header h1 {
+        margin: 0 0 0.25rem 0 !important;
+        font-size: 1.7rem !important;
+        background: linear-gradient(90deg, #f8fbff, #93c5fd);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .app-header p {
+        margin: 0;
+        color: #9db0c9;
+        font-size: 0.92rem;
+    }
+    .pill-row { margin-top: 0.7rem; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .pill {
+        display: inline-block;
+        padding: 0.22rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: 1px solid #334155;
+        background: rgba(15, 23, 42, 0.55);
+        color: #dbe7f7;
+    }
+    .pill.blue { border-color: rgba(59,130,246,0.55); color: #93c5fd; }
+    .pill.red { border-color: rgba(248,113,113,0.5); color: #fda4a4; }
+    .pill.amber { border-color: rgba(251,191,36,0.5); color: #fcd34d; }
+    .pill.green { border-color: rgba(52,211,153,0.45); color: #6ee7b7; }
+    .footer-note {
+        margin-top: 1.25rem;
+        padding: 0.85rem 1rem;
+        border-radius: 12px;
+        border: 1px solid #2b3b55;
+        background: rgba(17, 24, 39, 0.7);
+        color: #9db0c9;
+        font-size: 0.86rem;
+        text-align: center;
+    }
+    .footer-note strong { color: #eaf0ff; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -66,13 +157,14 @@ st.markdown(
 DARK_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(color="#c9d1d9", size=12),
+    font=dict(color="#c5d3e8", size=12),
     margin=dict(l=40, r=20, t=50, b=40),
-    xaxis=dict(gridcolor="#21262d", zerolinecolor="#21262d", color="#8b949e"),
-    yaxis=dict(gridcolor="#21262d", zerolinecolor="#21262d", color="#8b949e"),
-    title=dict(font=dict(color="#f0f6fc", size=14)),
+    xaxis=dict(gridcolor="#243247", zerolinecolor="#243247", color="#8fa0b8"),
+    yaxis=dict(gridcolor="#243247", zerolinecolor="#243247", color="#8fa0b8"),
+    title=dict(font=dict(color="#eaf0ff", size=14)),
 )
-COLORS = ["#58a6ff", "#3fb950", "#d2a8ff", "#e3b341", "#f85149", "#79c0ff"]
+# Cool blue / teal / violet / amber palette
+COLORS = ["#3b82f6", "#22d3ee", "#a78bfa", "#f59e0b", "#f43f5e", "#34d399"]
 
 
 def style_fig(fig: go.Figure, height: int = 340) -> go.Figure:
@@ -156,10 +248,10 @@ for key, default in {
 # Sidebar filters (simple)
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("Filters")
+    st.markdown("### 🎛️ Filters")
     st.caption("Made by Sai Preethi")
 
-    if st.button("Reset filters", use_container_width=True):
+    if st.button("↺ Reset filters", use_container_width=True):
         st.session_state["flt_contracts"] = list(all_contracts)
         st.session_state["flt_internets"] = list(all_internets)
         st.session_state["flt_payments"] = list(all_payments)
@@ -174,7 +266,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**Formulas**")
     st.code("Churn % = Churned / Total × 100\nRisk $ = Σ MonthlyCharges (churned)")
-    st.caption("Close/open this sidebar with the arrow at the top-left.")
+    st.caption("Use the top-left arrow to open/close this sidebar.")
 
 # Apply filters
 mask = (
@@ -199,10 +291,21 @@ df = analysis["df"]
 # ---------------------------------------------------------------------------
 # Main page
 # ---------------------------------------------------------------------------
-st.title("Customer Churn & Retention Spend")
-st.caption(
-    f"Made by Sai Preethi  ·  Showing {len(filtered_df):,} of {len(base_df):,} customers"
-    + ("  ·  filters active" if len(filtered_df) != len(base_df) else "")
+filter_active = len(filtered_df) != len(base_df)
+st.markdown(
+    f"""
+<div class="app-header">
+  <h1>📡 Customer Churn & Retention Spend</h1>
+  <p>SQL cohort analysis for telecom retention decisions · Made by Sai Preethi</p>
+  <div class="pill-row">
+    <span class="pill blue">Showing {len(filtered_df):,} / {len(base_df):,}</span>
+    <span class="pill red">Churn {kpis['churn_rate_pct']}%</span>
+    <span class="pill amber">Risk ${kpis['revenue_at_risk']:,.0f}/mo</span>
+    <span class="pill {'amber' if filter_active else 'green'}">{'Filters on' if filter_active else 'Full base'}</span>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
 )
 
 if len(filtered_df) == 0:
@@ -221,10 +324,9 @@ s2.metric("3–6 mo danger zone", f"{kpis['danger_zone_churn_pct']}%")
 s3.metric("Electronic check churn", f"{kpis['echeck_churn_pct']}%")
 s4.metric("Autopay churn", f"{kpis['autopay_churn_pct']}%")
 
-st.divider()
-
+st.markdown("")
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["Overview", "SQL Cohorts", "Heatmap", "Story & Decisions", "Customers"]
+    ["📊 Overview", "🧮 SQL Cohorts", "🔥 Heatmap", "📖 Story & Decisions", "📁 Customers"]
 )
 
 with tab1:
@@ -275,7 +377,13 @@ with tab3:
                 z=hm.values,
                 x=list(hm.columns),
                 y=list(hm.index),
-                colorscale="Blues",
+                colorscale=[
+                    [0.0, "#0f172a"],
+                    [0.25, "#1e3a5f"],
+                    [0.5, "#2563eb"],
+                    [0.75, "#f59e0b"],
+                    [1.0, "#f43f5e"],
+                ],
                 text=[[f"{v:.1f}%" if pd_notna(v) else "" for v in row] for row in hm.values],
                 texttemplate="%{text}",
                 textfont=dict(color="#f0f6fc", size=12),
@@ -346,5 +454,11 @@ with tab5:
         disabled=len(view) == 0,
     )
 
-st.divider()
-st.caption("Made by Sai Preethi · SQL cohorts · Pandas · Plotly · Streamlit")
+st.markdown(
+    """
+<div class="footer-note">
+  <strong>Made by Sai Preethi</strong> · SQL cohorts · Pandas · Plotly · Streamlit
+</div>
+""",
+    unsafe_allow_html=True,
+)
