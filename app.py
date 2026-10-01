@@ -11,7 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from data_analysis import build_analysis
+from data_analysis import TENURE_BAND_ORDER, analyze_dataframe, build_analysis
 
 
 def pd_notna(v):
@@ -55,13 +55,46 @@ st.markdown(
         font-family: 'DM Sans', sans-serif;
     }
 
-    /* Hide default Streamlit chrome noise */
+    /* Keep header visible so sidebar open/close control always works */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+    header[data-testid="stHeader"] {
+        background: rgba(11, 15, 25, 0.55) !important;
+        backdrop-filter: blur(8px);
+        height: 3rem;
+    }
+
+    /* Sidebar collapse / expand buttons must stay clickable */
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    button[kind="header"],
+    [data-testid="stBaseButton-headerNoPadding"],
+    [data-testid="stSidebarCollapseButton"] {
+        visibility: visible !important;
+        display: flex !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
+        color: #e8eef9 !important;
+    }
+
+    [data-testid="collapsedControl"] {
+        position: fixed !important;
+        left: 0.55rem !important;
+        top: 0.55rem !important;
+        background: #1a2234 !important;
+        border: 1px solid #2a3548 !important;
+        border-radius: 10px !important;
+        padding: 0.35rem 0.45rem !important;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="baseButton-header"] {
+        color: #e8eef9 !important;
+    }
 
     .block-container {
-        padding-top: 1.2rem;
+        padding-top: 2.4rem;
         padding-bottom: 2rem;
         max-width: 1280px;
     }
@@ -278,11 +311,23 @@ st.markdown(
         background: #0d1320 !important;
         border-right: 1px solid var(--border);
     }
-    section[data-testid="stSidebar"] * {
-        color: var(--text) !important;
-    }
     section[data-testid="stSidebar"] .stMarkdown p {
         color: var(--muted) !important;
+    }
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] div {
+        color: var(--text);
+    }
+
+    /* Keep sidebar open/close chevron readable on dark theme */
+    section[data-testid="stSidebar"] button {
+        color: #e8eef9 !important;
+    }
+
+    div[data-testid="stToolbar"] {
+        display: none;
     }
 
     /* Dataframes */
@@ -353,6 +398,10 @@ def bar_churn(df, x, y, title, color_seq=None, texttemplate="%{y:.1f}%"):
 
 
 def bar_revenue(df, x, y, title):
+    if df is None or len(df) == 0:
+        fig = go.Figure()
+        fig.update_layout(title=title, annotations=[dict(text="No data for current filters", showarrow=False, font=dict(color="#9aa8c0"))])
+        return style_fig(fig)
     fig = px.bar(
         df,
         x=x,
@@ -373,16 +422,104 @@ def bar_revenue(df, x, y, title):
     return style_fig(fig)
 
 
+def bar_churn_safe(df, x, y, title, color_seq=None, texttemplate="%{y:.1f}%"):
+    if df is None or len(df) == 0:
+        fig = go.Figure()
+        fig.update_layout(title=title, annotations=[dict(text="No data for current filters", showarrow=False, font=dict(color="#9aa8c0"))])
+        return style_fig(fig)
+    return bar_churn(df, x, y, title, color_seq=color_seq, texttemplate=texttemplate)
+
+
 # ---------------------------------------------------------------------------
-# Data
+# Data (base load once, then recompute on filters)
 # ---------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def get_analysis():
+def get_base_data():
     return build_analysis()
 
 
-with st.spinner("Running SQL cohort analysis…"):
-    analysis = get_analysis()
+with st.spinner("Loading dataset…"):
+    base = get_base_data()
+
+base_df = base["df"]
+all_contracts = sorted(base_df["Contract"].dropna().unique().tolist())
+all_internets = sorted(base_df["InternetService"].dropna().unique().tolist())
+all_payments = sorted(base_df["payment_group"].dropna().unique().tolist())
+all_tenures = [b for b in TENURE_BAND_ORDER if b in set(base_df["tenure_band"].unique())]
+
+# ---------------------------------------------------------------------------
+# Sidebar filters — drive the whole dashboard
+# ---------------------------------------------------------------------------
+FILTER_KEYS = ("flt_contracts", "flt_internets", "flt_payments", "flt_tenures")
+
+
+def _ensure_filter_defaults():
+    if "flt_contracts" not in st.session_state:
+        st.session_state["flt_contracts"] = list(all_contracts)
+    if "flt_internets" not in st.session_state:
+        st.session_state["flt_internets"] = list(all_internets)
+    if "flt_payments" not in st.session_state:
+        st.session_state["flt_payments"] = list(all_payments)
+    if "flt_tenures" not in st.session_state:
+        st.session_state["flt_tenures"] = list(all_tenures)
+
+
+_ensure_filter_defaults()
+
+with st.sidebar:
+    st.markdown("### 🎛️ Filters")
+    st.caption("Changing any filter updates KPIs, charts, cohorts, heatmap, stories, and the customer table.")
+
+    if st.button("↺ Reset filters", use_container_width=True, key="btn_reset_filters"):
+        st.session_state["flt_contracts"] = list(all_contracts)
+        st.session_state["flt_internets"] = list(all_internets)
+        st.session_state["flt_payments"] = list(all_payments)
+        st.session_state["flt_tenures"] = list(all_tenures)
+        st.rerun()
+
+    contracts = st.multiselect(
+        "Contract type",
+        options=all_contracts,
+        key="flt_contracts",
+        help="Deselect values to narrow the dashboard. Reset restores the full base.",
+    )
+    internets = st.multiselect(
+        "Internet service",
+        options=all_internets,
+        key="flt_internets",
+    )
+    payments = st.multiselect(
+        "Payment group",
+        options=all_payments,
+        key="flt_payments",
+    )
+    tenure_bands = st.multiselect(
+        "Tenure band",
+        options=all_tenures,
+        key="flt_tenures",
+    )
+
+    st.markdown("---")
+    st.markdown("**Formulas**")
+    st.code(
+        "Churn Rate = Churned ÷ Total × 100\n"
+        "Revenue at Risk = Σ MonthlyCharges (churned)",
+        language="text",
+    )
+    st.markdown("---")
+    st.markdown("**Made by Sai Preethi**")
+    st.caption("Data-driven retention spend decisions")
+    st.caption("Tip: use the « / » control at the top to close or reopen this sidebar.")
+
+# Apply filters to base data, then recompute SQL cohorts + KPIs
+mask = (
+    base_df["Contract"].isin(contracts if contracts else [])
+    & base_df["InternetService"].isin(internets if internets else [])
+    & base_df["payment_group"].isin(payments if payments else [])
+    & base_df["tenure_band"].isin(tenure_bands if tenure_bands else [])
+)
+filtered_df = base_df.loc[mask].copy()
+analysis = analyze_dataframe(filtered_df)
 
 kpis = analysis["kpis"]
 by_contract = analysis["by_contract"]
@@ -394,42 +531,11 @@ heatmap = analysis["heatmap"]
 stories = analysis["stories"]
 df = analysis["df"]
 
-# ---------------------------------------------------------------------------
-# Sidebar filters (optional exploration)
-# ---------------------------------------------------------------------------
-with st.sidebar:
-    st.markdown("### 🎛️ Explore filters")
-    st.caption("Filters refine the customer table below. KPI cards & SQL cohorts stay full-base for decision context.")
-    contracts = st.multiselect(
-        "Contract type",
-        options=sorted(df["Contract"].unique()),
-        default=sorted(df["Contract"].unique()),
-    )
-    internets = st.multiselect(
-        "Internet service",
-        options=sorted(df["InternetService"].unique()),
-        default=sorted(df["InternetService"].unique()),
-    )
-    payments = st.multiselect(
-        "Payment group",
-        options=sorted(df["payment_group"].unique()),
-        default=sorted(df["payment_group"].unique()),
-    )
-    tenure_bands = st.multiselect(
-        "Tenure band",
-        options=list(by_tenure["segment"].astype(str)),
-        default=list(by_tenure["segment"].astype(str)),
-    )
-    st.markdown("---")
-    st.markdown("**Formulas**")
-    st.code(
-        "Churn Rate = Churned ÷ Total × 100\n"
-        "Revenue at Risk = Σ MonthlyCharges (churned)",
-        language="text",
-    )
-    st.markdown("---")
-    st.markdown("**Made by Sai Preethi**")
-    st.caption("Data-driven retention spend decisions")
+filter_active = len(filtered_df) != len(base_df)
+filter_note = (
+    f"Showing **{len(filtered_df):,}** of **{len(base_df):,}** customers"
+    + (" · filters active" if filter_active else " · full dataset")
+)
 
 # ---------------------------------------------------------------------------
 # Hero
@@ -448,11 +554,16 @@ st.markdown(
     <span class="badge danger">Churn {kpis['churn_rate_pct']}%</span>
     <span class="badge warn">Revenue at risk ${kpis['revenue_at_risk']:,.0f}/mo</span>
     <span class="badge good">Made by Sai Preethi</span>
+    <span class="badge {'warn' if filter_active else 'accent'}">{'Filtered view' if filter_active else 'Full base'}</span>
   </div>
 </div>
 """,
     unsafe_allow_html=True,
 )
+
+st.caption(filter_note)
+if len(filtered_df) == 0:
+    st.warning("No customers match the current filters. Reset filters in the sidebar or select at least one value in each filter.")
 
 # ---------------------------------------------------------------------------
 # KPI cards
@@ -518,22 +629,22 @@ with tab_overview:
 
     col_a, col_b = st.columns(2)
     with col_a:
-        fig = bar_churn(by_contract, "segment", "churn_rate_pct", "Churn rate by contract type")
+        fig = bar_churn_safe(by_contract, "segment", "churn_rate_pct", "Churn rate by contract type")
         st.plotly_chart(fig, use_container_width=True)
         fig2 = bar_revenue(by_contract, "segment", "revenue_at_risk", "Revenue at risk by contract")
         st.plotly_chart(fig2, use_container_width=True)
     with col_b:
-        fig = bar_churn(by_tenure, "segment", "churn_rate_pct", "Churn rate by tenure band")
+        fig = bar_churn_safe(by_tenure, "segment", "churn_rate_pct", "Churn rate by tenure band")
         st.plotly_chart(fig, use_container_width=True)
         fig2 = bar_revenue(by_tenure, "segment", "revenue_at_risk", "Revenue at risk by tenure band")
         st.plotly_chart(fig2, use_container_width=True)
 
     col_c, col_d = st.columns(2)
     with col_c:
-        fig = bar_churn(by_internet, "segment", "churn_rate_pct", "Churn rate by internet service")
+        fig = bar_churn_safe(by_internet, "segment", "churn_rate_pct", "Churn rate by internet service")
         st.plotly_chart(fig, use_container_width=True)
     with col_d:
-        fig = bar_churn(
+        fig = bar_churn_safe(
             by_payment,
             "segment",
             "churn_rate_pct",
@@ -605,28 +716,31 @@ with tab_heatmap:
         """,
         unsafe_allow_html=True,
     )
-    hm = heatmap.copy()
-    fig = go.Figure(
-        data=go.Heatmap(
-            z=hm.values,
-            x=list(hm.columns),
-            y=list(hm.index),
-            colorscale=[
-                [0.0, "#0f1b2e"],
-                [0.25, "#1e3a5f"],
-                [0.5, "#5b8cff"],
-                [0.75, "#f5c542"],
-                [1.0, "#ff6b8a"],
-            ],
-            text=[[f"{v:.1f}%" if pd_notna(v) else "" for v in row] for row in hm.values],
-            texttemplate="%{text}",
-            textfont=dict(color="#e8eef9", size=12),
-            colorbar=dict(title="Churn %", ticksuffix="%"),
-            hovertemplate="Contract: %{y}<br>Tenure: %{x}<br>Churn: %{z:.1f}%<extra></extra>",
+    hm = heatmap.copy() if heatmap is not None else pd.DataFrame()
+    if hm.empty:
+        st.info("Heatmap unavailable for the current filter selection (need contract × tenure combinations).")
+    else:
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=hm.values,
+                x=list(hm.columns),
+                y=list(hm.index),
+                colorscale=[
+                    [0.0, "#0f1b2e"],
+                    [0.25, "#1e3a5f"],
+                    [0.5, "#5b8cff"],
+                    [0.75, "#f5c542"],
+                    [1.0, "#ff6b8a"],
+                ],
+                text=[[f"{v:.1f}%" if pd_notna(v) else "" for v in row] for row in hm.values],
+                texttemplate="%{text}",
+                textfont=dict(color="#e8eef9", size=12),
+                colorbar=dict(title="Churn %", ticksuffix="%"),
+                hovertemplate="Contract: %{y}<br>Tenure: %{x}<br>Churn: %{z:.1f}%<extra></extra>",
+            )
         )
-    )
-    fig.update_layout(xaxis_title="Tenure band", yaxis_title="Contract")
-    st.plotly_chart(style_fig(fig, height=420), use_container_width=True)
+        fig.update_layout(xaxis_title="Tenure band", yaxis_title="Contract")
+        st.plotly_chart(style_fig(fig, height=420), use_container_width=True)
 
     st.markdown(
         """
@@ -692,18 +806,21 @@ with tab_story:
         )
 
     st.markdown("#### Real customer stories (revenue at risk)")
-    for _, row in stories.iterrows():
-        st.markdown(
-            f"""
-            <div class="story-card">
-              {row['story']}<br/>
-              <span style="color:#9aa8c0;font-size:0.82rem;">
-                Internet: {row['InternetService']} · Payment: {row['PaymentMethod']}
-              </span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    if stories is None or len(stories) == 0:
+        st.info("No churned-customer stories available for the current filters.")
+    else:
+        for _, row in stories.iterrows():
+            st.markdown(
+                f"""
+                <div class="story-card">
+                  {row['story']}<br/>
+                  <span style="color:#9aa8c0;font-size:0.82rem;">
+                    Internet: {row['InternetService']} · Payment: {row['PaymentMethod']}
+                  </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # Classic narrative example baked in (as required)
     example_charge = 70.0
@@ -751,20 +868,14 @@ with tab_data:
         """
         <div class="section-card">
           <div class="section-title">Filtered customer explorer</div>
-          <p class="section-sub">Use the sidebar filters to inspect individual records. Export-ready table.</p>
+          <p class="section-sub">Same sidebar filters power this table and every chart/KPI above.</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    mask = (
-        df["Contract"].isin(contracts)
-        & df["InternetService"].isin(internets)
-        & df["payment_group"].isin(payments)
-        & df["tenure_band"].isin(tenure_bands)
-    )
-    view = df.loc[
-        mask,
-        [
+    cols = [
+        c
+        for c in [
             "customerID",
             "gender",
             "tenure",
@@ -777,9 +888,11 @@ with tab_data:
             "TotalCharges",
             "Churn",
             "AnnualRisk",
-        ],
+        ]
+        if c in df.columns
     ]
-    st.caption(f"Showing {len(view):,} of {len(df):,} customers")
+    view = df.loc[:, cols] if len(df) and cols else pd.DataFrame(columns=cols)
+    st.caption(f"Showing {len(view):,} of {len(base_df):,} customers (after filters)")
     st.dataframe(view, use_container_width=True, hide_index=True, height=420)
 
     csv_bytes = view.to_csv(index=False).encode("utf-8")
@@ -788,6 +901,7 @@ with tab_data:
         data=csv_bytes,
         file_name="filtered_customers.csv",
         mime="text/csv",
+        disabled=len(view) == 0,
     )
 
 # ---------------------------------------------------------------------------
