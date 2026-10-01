@@ -261,9 +261,64 @@ def storytelling_examples(df: pd.DataFrame, n: int = 5) -> pd.DataFrame:
     return sample
 
 
-def build_analysis(path: Path | str | None = None) -> dict:
-    """End-to-end pipeline used by the Streamlit app."""
-    df = load_and_clean(path)
+def empty_analysis_result(df: pd.DataFrame | None = None) -> dict:
+    """Safe empty payload when filters match zero rows."""
+    empty_cols = [
+        "segment",
+        "total_customers",
+        "churned_customers",
+        "churn_rate_pct",
+        "revenue_at_risk",
+        "avg_monthly_charge",
+        "annual_revenue_at_risk",
+    ]
+    empty_cohort = pd.DataFrame(columns=empty_cols)
+    empty_detail = pd.DataFrame(
+        columns=["segment", "total_customers", "churned_customers", "churn_rate_pct", "revenue_at_risk"]
+    )
+    base_df = df if df is not None else pd.DataFrame()
+    return {
+        "df": base_df,
+        "kpis": {
+            "total_customers": 0,
+            "churned_customers": 0,
+            "retained_customers": 0,
+            "churn_rate_pct": 0.0,
+            "revenue_at_risk": 0.0,
+            "annual_revenue_at_risk": 0.0,
+            "avg_churn_monthly_charge": 0.0,
+            "danger_zone_churn_pct": 0.0,
+            "m2m_churn_pct": 0.0,
+            "echeck_churn_pct": 0.0,
+            "autopay_churn_pct": 0.0,
+        },
+        "by_contract": empty_cohort.copy(),
+        "by_tenure": empty_cohort.copy(),
+        "by_internet": empty_cohort.copy(),
+        "by_payment": empty_cohort.copy(),
+        "by_payment_detail": empty_detail.copy(),
+        "heatmap": pd.DataFrame(),
+        "stories": pd.DataFrame(
+            columns=[
+                "customerID",
+                "tenure",
+                "tenure_band",
+                "Contract",
+                "InternetService",
+                "PaymentMethod",
+                "MonthlyCharges",
+                "AnnualRisk",
+                "story",
+            ]
+        ),
+    }
+
+
+def analyze_dataframe(df: pd.DataFrame) -> dict:
+    """Run KPIs + SQL cohorts on an already-cleaned (optionally filtered) frame."""
+    if df is None or len(df) == 0:
+        return empty_analysis_result(df if df is not None else pd.DataFrame())
+
     conn = _to_sqlite(df)
     try:
         result = {
@@ -280,6 +335,12 @@ def build_analysis(path: Path | str | None = None) -> dict:
     finally:
         conn.close()
     return result
+
+
+def build_analysis(path: Path | str | None = None) -> dict:
+    """End-to-end pipeline used by the Streamlit app (full dataset)."""
+    df = load_and_clean(path)
+    return analyze_dataframe(df)
 
 
 if __name__ == "__main__":
