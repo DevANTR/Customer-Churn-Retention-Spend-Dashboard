@@ -1,6 +1,6 @@
 """
 Customer Churn & Retention Spend Dashboard
-Simple dark-theme Streamlit UI · SQL cohort analysis
+Streamlit Dashboard· SQL cohort analysis
 Made by Sai Preethi
 """
 
